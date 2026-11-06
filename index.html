@@ -1,0 +1,730 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Craps Live</title>
+<meta name="description" content="Live craps with a friend: shared table, chat, no sign-in.">
+<meta property="og:title" content="🎲 Join my craps table!">
+<meta property="og:description" content="Live craps with a friend: shared table and chat. No sign-in needed.">
+<meta property="og:image" content="https://john-gustin.github.io/craps/og.png">
+<meta property="og:type" content="website">
+<meta name="twitter:card" content="summary_large_image">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect x='6' y='6' width='52' height='52' rx='12' fill='%23c8102e'/%3E%3Cg fill='%23fff'%3E%3Ccircle cx='20' cy='20' r='6'/%3E%3Ccircle cx='32' cy='32' r='6'/%3E%3Ccircle cx='44' cy='44' r='6'/%3E%3C/g%3E%3C/svg%3E">
+<script src="peerjs.min.js"></script>
+<style>
+:root{
+  --bg:#101418;--panel:#1a2027;--panel2:#232b34;--line:#33404d;--text:#e9eef3;--muted:#9aa8b6;
+  --gold:#e8b64a;--green:#2fbf71;--red:#e2574c;--s0:#3d8bf0;--s1:#f08a3d;
+  --felt:#0d6a3c;--felt2:#0a5631;--chalk:rgba(255,255,255,.85);
+}
+*{box-sizing:border-box}
+html,body{margin:0;background:var(--bg);color:var(--text);font:14px/1.4 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif}
+button{font:inherit;cursor:pointer;border:1px solid var(--line);background:var(--panel2);color:var(--text);border-radius:8px;padding:7px 12px}
+button:hover:not(:disabled){border-color:#5a6b7d}
+button:disabled{opacity:.45;cursor:not-allowed}
+button.primary{background:var(--gold);color:#1a1405;border-color:var(--gold);font-weight:700}
+input[type=text]{font:inherit;background:#0d1115;color:var(--text);border:1px solid var(--line);border-radius:8px;padding:9px 12px;width:100%}
+header{display:flex;align-items:center;gap:14px;padding:9px 18px;border-bottom:1px solid var(--line);background:#141a20}
+.logo{font-weight:800;font-size:19px}
+#netStatus{font-size:13px;color:var(--muted);display:flex;align-items:center;gap:6px}
+#netStatus .dot{width:8px;height:8px;border-radius:50%;background:var(--muted)}
+.hdr-r{margin-left:auto;display:flex;gap:8px}
+.hdr-r button{padding:5px 11px}
+#lobby{max-width:560px;margin:50px auto;padding:0 16px}
+.card{background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:24px}
+.card h1{margin:0 0 6px;font-size:26px}
+.card p{color:var(--muted);margin:0 0 16px}
+.field{margin-bottom:14px}.field label{display:block;font-size:13px;color:var(--muted);margin-bottom:5px}
+#game{display:grid;grid-template-columns:minmax(0,1fr) 340px;gap:14px;padding:14px 18px;max-width:1500px;margin:0 auto}
+#game[hidden]{display:none}
+/* rail */
+.rail{display:flex;align-items:center;gap:18px;background:linear-gradient(#3a2414,#2a190d);border-radius:16px 16px 0 0;padding:10px 18px;border:1px solid #4d321c;border-bottom:none}
+.dice{display:flex;gap:12px}
+.die{width:52px;height:52px;background:linear-gradient(145deg,#e8283f,#a90d22);border-radius:10px;display:grid;grid-template-columns:repeat(3,1fr);grid-template-rows:repeat(3,1fr);padding:7px;box-shadow:0 4px 10px rgba(0,0,0,.5),inset 0 1px 2px rgba(255,255,255,.4)}
+.die i{width:10px;height:10px;border-radius:50%;background:#fff;place-self:center;visibility:hidden;box-shadow:inset 0 1px 1px rgba(0,0,0,.3)}
+.die i.on{visibility:visible}
+.die.roll{animation:tumble .18s linear infinite}
+@keyframes tumble{0%{transform:rotate(0) translateY(0)}25%{transform:rotate(90deg) translateY(-6px)}50%{transform:rotate(180deg)}75%{transform:rotate(270deg) translateY(-4px)}100%{transform:rotate(360deg)}}
+#rollText{font-size:20px;font-weight:800;min-width:240px}
+#rollSub{font-size:13px;color:#e9d9c4}
+.puckbox{margin-left:auto;display:flex;align-items:center;gap:10px}
+.puck{width:46px;height:46px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-weight:900;font-size:13px;border:3px solid #222;box-shadow:0 2px 6px rgba(0,0,0,.5)}
+.puck.off{background:#111;color:#fff}
+.puck.on{background:#fff;color:#111}
+#history{display:flex;gap:4px;flex-wrap:wrap;max-width:260px;justify-content:flex-end}
+#history span{width:22px;height:22px;border-radius:5px;background:rgba(255,255,255,.12);display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:700}
+#history span.seven{background:#b3261e}
+/* felt */
+.felt{background:radial-gradient(ellipse at 40% 30%,#14824b,var(--felt) 55%,var(--felt2));border:1px solid #4d321c;border-top:none;border-radius:0 0 16px 16px;padding:14px;display:grid;grid-template-columns:minmax(0,1fr) 240px;gap:14px;font-family:Georgia,"Times New Roman",serif;user-select:none}
+.main{display:grid;grid-template-columns:90px repeat(6,minmax(0,1fr));grid-template-rows:150px 64px 74px 56px 64px;gap:6px}
+.area{border:2px solid var(--chalk);border-radius:8px;position:relative;cursor:pointer;color:#fff;padding:6px;display:flex;flex-direction:column;align-items:center;justify-content:flex-start;text-align:center;transition:background .15s}
+.area:hover{background:rgba(255,255,255,.08)}
+.area.locked{cursor:not-allowed}
+.area.flash-win{animation:fw .9s}
+@keyframes fw{0%{background:rgba(255,230,120,.45)}100%{background:transparent}}
+.lbl{font-weight:700;letter-spacing:1px;font-size:15px;text-transform:uppercase;text-shadow:0 1px 2px rgba(0,0,0,.4)}
+.pay{font-size:11px;opacity:.85;font-family:system-ui,sans-serif}
+.num .big{font-size:36px;font-weight:700;line-height:1.1}
+.num.point{background:rgba(255,255,255,.14);box-shadow:inset 0 0 0 3px #fff}
+.num .pk{position:absolute;top:-10px;right:-10px;width:30px;height:30px;font-size:10px;border-width:2px}
+.chips{display:flex;flex-wrap:wrap;gap:3px;justify-content:center;margin-top:4px;font-family:system-ui,sans-serif}
+.chip{font-size:11px;font-weight:800;padding:2px 7px;border-radius:999px;border:2px dashed rgba(255,255,255,.85);color:#fff;white-space:nowrap;box-shadow:0 1px 3px rgba(0,0,0,.4)}
+.chip.s0{background:var(--s0)}.chip.s1{background:var(--s1)}
+.chip small{font-weight:600;opacity:.85}
+.oddsbtn{position:absolute;bottom:4px;left:50%;transform:translateX(-50%);font-size:10px;padding:2px 6px;border-radius:6px;background:rgba(0,0,0,.45);border-color:rgba(255,255,255,.6);font-family:system-ui,sans-serif}
+.props{display:grid;grid-template-columns:1fr 1fr;gap:6px;align-content:start}
+.props .area{min-height:52px;justify-content:center}
+.props .wide{grid-column:span 2}
+.props .lbl{font-size:13px}
+.ptitle{grid-column:span 2;text-align:center;font-size:12px;letter-spacing:2px;color:rgba(255,255,255,.75);text-transform:uppercase}
+.float{position:absolute;left:50%;top:40%;background:rgba(0,0,0,.72);padding:2px 9px;border-radius:999px;transform:translate(-50%,0);font:800 16px system-ui;pointer-events:none;animation:up 1.8s forwards;text-shadow:0 1px 3px rgba(0,0,0,.8);z-index:3}
+@keyframes up{0%{opacity:0;transform:translate(-50%,10px)}15%{opacity:1}80%{opacity:1}100%{opacity:0;transform:translate(-50%,-40px)}}
+.hint{color:var(--muted);font-size:12px;margin-top:8px}
+/* sidebar */
+.side{display:flex;flex-direction:column;gap:12px;min-height:0}
+.pcards{display:grid;gap:8px}
+.pcard{background:var(--panel);border:2px solid var(--line);border-radius:12px;padding:9px 12px;display:grid;grid-template-columns:auto 1fr auto;gap:2px 10px;align-items:center}
+.pcard.shooter{border-color:var(--gold)}
+.pcard .sw{width:12px;height:12px;border-radius:50%}
+.pcard .nm{font-weight:700}
+.pcard .bk{font-weight:800;font-size:17px;text-align:right}
+.pcard .sub{grid-column:2 / span 2;font-size:12px;color:var(--muted);display:flex;justify-content:space-between}
+.pcard .off{color:var(--red)}
+.box{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:12px}
+.chipsel{display:flex;gap:8px;justify-content:space-between}
+.cs{width:50px;height:50px;border-radius:50%;border:4px dashed rgba(255,255,255,.75);display:flex;align-items:center;justify-content:center;font-weight:800;font-size:13px;color:#fff;cursor:pointer;box-shadow:0 2px 6px rgba(0,0,0,.4);transition:transform .1s}
+.cs.sel{transform:translateY(-4px) scale(1.08);box-shadow:0 0 0 3px var(--gold),0 4px 10px rgba(0,0,0,.5)}
+#rollBtn{width:100%;margin-top:10px;font-size:17px;padding:11px}
+.row{display:flex;gap:8px;margin-top:8px}
+.row button{flex:1;font-size:13px}
+.chat{display:flex;flex-direction:column;flex:1;min-height:260px;max-height:calc(100vh - 470px)}
+#chatLog{flex:1;overflow:auto;display:flex;flex-direction:column;gap:5px;padding-right:4px;min-height:150px}
+#chatLog .m{font-size:13px;line-height:1.35;word-wrap:break-word}
+#chatLog .m b{font-weight:700}
+#chatLog .sys{color:var(--muted);font-size:12px}
+#chatForm{display:flex;gap:6px;margin-top:8px}
+#chatForm input{padding:8px 10px}
+#toast{position:fixed;bottom:22px;left:50%;transform:translateX(-50%);background:#2b1416;border:1px solid var(--red);color:#fff;padding:9px 16px;border-radius:10px;z-index:20;opacity:0;transition:opacity .2s;pointer-events:none}
+#toast.show{opacity:1}
+#modal{position:fixed;inset:0;background:rgba(0,0,0,.6);display:flex;align-items:center;justify-content:center;z-index:10;padding:16px}
+#modal[hidden]{display:none}
+.mbox{background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:22px;max-width:620px;width:100%;max-height:90vh;overflow:auto}
+.mbox h2{margin:0 0 8px}.mbox p,.mbox li{color:var(--muted)}
+.mbox .row{justify-content:flex-end}
+.mbox .row button{flex:0 0 auto}
+.copied{color:var(--green);font-size:13px;align-self:center}
+@media (max-width:1150px){#game{grid-template-columns:1fr}.chat{max-height:none}}
+@media (max-width:760px){.felt{grid-template-columns:1fr}.main{grid-template-columns:60px repeat(6,minmax(0,1fr));grid-template-rows:120px 56px 64px 52px 56px}.lbl{font-size:12px}.num .big{font-size:26px}.rail{flex-wrap:wrap}}
+</style>
+</head>
+<body>
+<header>
+  <div class="logo">🎲 Craps Live</div>
+  <div id="netStatus"><span class="dot"></span><span id="netText"></span></div>
+  <div class="hdr-r">
+    <button id="inviteBtn" hidden>📨 Invite link</button>
+    <button id="soundBtn">🔊</button>
+    <button id="helpBtn">How to play</button>
+    <button id="newBtn">New table</button>
+  </div>
+</header>
+
+<section id="lobby" hidden>
+  <div class="card">
+    <h1>Live craps with a friend</h1>
+    <p>Open a table, send your friend the link, and play together in real time with chat. You each start with $1,000 in play money and bet against the house. No sign-in.</p>
+    <div class="field"><label for="nameIn">Your name</label><input type="text" id="nameIn" maxlength="16" placeholder="e.g. John"></div>
+    <button class="primary" id="createBtn">Open a table</button>
+    <p class="hint" style="margin-top:14px">Keep this tab open while you play: your browser hosts the table. If you close it, reopen the same link to pick up where you left off.</p>
+  </div>
+</section>
+
+<section id="game" hidden>
+  <div>
+    <div class="rail">
+      <div class="dice"><div class="die" id="d1"></div><div class="die" id="d2"></div></div>
+      <div><div id="rollText">Place your bets</div><div id="rollSub"></div></div>
+      <div class="puckbox"><div id="history"></div><div class="puck off" id="puck">OFF</div></div>
+    </div>
+    <div class="felt" id="felt">
+      <div class="main" id="mainGrid"></div>
+      <div class="props" id="propGrid"></div>
+    </div>
+    <div class="hint">Click a betting area to add the selected chip. <b>Right-click</b> (or Shift+click) an area to take your bet down. Hover any area to see what it pays.</div>
+  </div>
+  <div class="side">
+    <div class="pcards" id="pcards"></div>
+    <div class="box">
+      <div class="chipsel" id="chipsel"></div>
+      <button class="primary" id="rollBtn">Roll the dice</button>
+      <div class="row"><button id="clearBtn">Take down my bets</button><button id="rebuyBtn">Rebuy $1,000</button></div>
+    </div>
+    <div class="box chat">
+      <div id="chatLog"></div>
+      <form id="chatForm" autocomplete="off"><input type="text" id="chatIn" maxlength="300" placeholder="Say something…"><button class="primary">Send</button></form>
+    </div>
+  </div>
+</section>
+<div id="modal" hidden><div class="mbox" id="mbox"></div></div>
+<div id="toast"></div>
+
+<script>
+'use strict';
+/* ===================== rules data ===================== */
+const NUMS=[4,5,6,8,9,10];
+const ODDS_PAY={4:[2,1],5:[3,2],6:[6,5],8:[6,5],9:[3,2],10:[2,1]};
+const LAY_PAY={4:[1,2],5:[2,3],6:[5,6],8:[5,6],9:[2,3],10:[1,2]};
+const PLACE_PAY={4:[9,5],5:[7,5],6:[7,6],8:[7,6],9:[7,5],10:[9,5]};
+const ODDS_MAX={4:3,5:4,6:5,8:5,9:4,10:3};
+const START_BANK=1000, MAX_BET=500, CHIPS=[1,5,25,100,500];
+const CHIP_COL={1:'#8a8f98',5:'#c8102e',25:'#1e8a3a',100:'#222',500:'#6b2fa0'};
+const PROPS={a7:['Any Seven',4],ac:['Any Craps',7],y2:['Aces (2)',30],y3:['Ace-Deuce (3)',15],y11:['Yo (11)',15],y12:['Boxcars (12)',30]};
+function label(k){
+  if(k==='pass')return 'Pass Line';if(k==='dp')return "Don't Pass";if(k==='po')return 'Pass Odds';if(k==='dpo')return 'Lay Odds';
+  if(k==='come')return 'Come';if(k==='dc')return "Don't Come";if(k==='field')return 'Field';if(k==='ce')return 'C & E';
+  if(k==='b6')return 'Big 6';if(k==='b8')return 'Big 8';if(PROPS[k])return PROPS[k][0];
+  let m;
+  if((m=k.match(/^pl(\d+)$/)))return 'Place '+m[1];if((m=k.match(/^h(\d+)$/)))return 'Hard '+m[1];
+  if((m=k.match(/^co(\d+)$/)))return 'Come odds on '+m[1];if((m=k.match(/^c(\d+)$/)))return 'Come on '+m[1];
+  if((m=k.match(/^do(\d+)$/)))return "Don't Come odds on "+m[1];if((m=k.match(/^d(\d+)$/)))return "Don't Come on "+m[1];
+  return k;
+}
+const isOdds=k=>/^(po|dpo|co\d+|do\d+)$/.test(k);
+const minFor=k=>(/^(h\d+|a7|ac|y\d+|ce)$/.test(k)||isOdds(k))?1:5;
+const money=n=>(n<0?'−$':'$')+Math.abs(n).toLocaleString();
+
+function canBet(st,seat,k,amt){
+  const p=st.players[seat];if(!p)return 'No seat';
+  if(st.rolling)return 'Dice are rolling…';
+  if(amt>p.bank)return 'Not enough money';
+  const B=st.bets[seat],cur=B[k]||0,tot=cur+amt,pt=st.point;
+  let m;
+  if(k==='pass'||k==='dp'){if(pt!==null)return 'Line bets go down on the come-out roll (point is OFF)';}
+  else if(k==='come'||k==='dc'){if(pt===null)return 'Come bets need a point to be ON. Use the Pass Line now';}
+  else if(k==='po'){if(pt===null||!B.pass)return 'You need a Pass Line bet with a point ON';if(tot>B.pass*ODDS_MAX[pt])return `Max odds on ${pt} is ${ODDS_MAX[pt]}x (${money(B.pass*ODDS_MAX[pt])})`;}
+  else if(k==='dpo'){if(pt===null||!B.dp)return "You need a Don't Pass bet with a point ON";if(tot>B.dp*6)return `Max lay odds is 6x (${money(B.dp*6)})`;}
+  else if((m=k.match(/^co(\d+)$/))){const c=B['c'+m[1]];if(!c)return 'No Come bet on '+m[1];if(tot>c*ODDS_MAX[m[1]])return `Max odds is ${ODDS_MAX[m[1]]}x`;}
+  else if((m=k.match(/^do(\d+)$/))){const c=B['d'+m[1]];if(!c)return "No Don't Come bet on "+m[1];if(tot>c*6)return 'Max lay odds is 6x';}
+  else if(/^[cd]\d+$/.test(k))return 'Come bets move to numbers on their own';
+  else if(!/^(field|ce|b6|b8|pl\d+|h\d+|a7|ac|y\d+)$/.test(k))return 'Unknown bet';
+  if(!isOdds(k)&&tot>MAX_BET)return `Table max is ${money(MAX_BET)} per bet`;
+  if(tot<minFor(k))return `Minimum on ${label(k)} is ${money(minFor(k))}`;
+  if(k==='ce'&&tot%2)return 'C & E bets must be an even amount';
+  return null;
+}
+function canRemove(st,k){
+  if(st.rolling)return 'Dice are rolling…';
+  if(k==='pass'&&st.point!==null)return 'Pass Line is a contract bet once the point is ON';
+  if(/^c\d+$/.test(k))return 'Come bets on a number are contract bets';
+  return null;
+}
+function frac(a,[n,d]){return Math.floor(a*n/d);}
+function settle(st,d1,d2){
+  const s=d1+d2,hard=d1===d2,co=st.point===null,pt=st.point;
+  const out={};
+  st.players.forEach((p,seat)=>{
+    if(!p)return;
+    const B=st.bets[seat],ev=[];let bank=p.bank;
+    const has=k=>(B[k]||0)>0;
+    const win=(k,w,stays)=>{if(stays)bank+=w;else{bank+=w+B[k];delete B[k];}ev.push({k,d:w});};
+    const lose=k=>{ev.push({k,d:-B[k]});delete B[k];};
+    const push=k=>{bank+=B[k];ev.push({k,d:0,push:true});delete B[k];};
+    // pass / don't pass
+    if(has('pass')){
+      if(co){if(s===7||s===11)win('pass',B.pass,true);else if(s===2||s===3||s===12)lose('pass');}
+      else if(s===pt){win('pass',B.pass,true);if(has('po'))win('po',frac(B.po,ODDS_PAY[pt]),false);}
+      else if(s===7){lose('pass');if(has('po'))lose('po');}
+    }
+    if(has('dp')){
+      if(co){if(s===2||s===3)win('dp',B.dp,true);else if(s===12)ev.push({k:'dp',d:0,push:true});else if(s===7||s===11)lose('dp');}
+      else if(s===7){win('dp',B.dp,true);if(has('dpo'))win('dpo',frac(B.dpo,LAY_PAY[pt]),false);}
+      else if(s===pt){lose('dp');if(has('dpo'))lose('dpo');}
+    }
+    // come bets already on numbers
+    for(const n of NUMS){
+      if(has('c'+n)){
+        if(s===n){win('c'+n,B['c'+n],false);if(has('co'+n)){if(co)push('co'+n);else win('co'+n,frac(B['co'+n],ODDS_PAY[n]),false);}}
+        else if(s===7){lose('c'+n);if(has('co'+n)){if(co)push('co'+n);else lose('co'+n);}}
+      }
+      if(has('d'+n)){
+        if(s===7){win('d'+n,B['d'+n],false);if(has('do'+n))win('do'+n,frac(B['do'+n],LAY_PAY[n]),false);}
+        else if(s===n){lose('d'+n);if(has('do'+n))lose('do'+n);}
+      }
+    }
+    // come / don't come in the box
+    if(has('come')){
+      if(s===7||s===11)win('come',B.come,false);
+      else if(s===2||s===3||s===12)lose('come');
+      else{B['c'+s]=(B['c'+s]||0)+B.come;ev.push({k:'c'+s,d:0,move:true});delete B.come;}
+    }
+    if(has('dc')){
+      if(s===2||s===3)win('dc',B.dc,false);
+      else if(s===12)push('dc');
+      else if(s===7||s===11)lose('dc');
+      else{B['d'+s]=(B['d'+s]||0)+B.dc;ev.push({k:'d'+s,d:0,move:true});delete B.dc;}
+    }
+    // place bets (off on the come-out)
+    for(const n of NUMS)if(has('pl'+n)&&!co){if(s===n)win('pl'+n,frac(B['pl'+n],PLACE_PAY[n]),true);else if(s===7)lose('pl'+n);}
+    // field
+    if(has('field')){if(s===2)win('field',B.field*2,true);else if(s===12)win('field',B.field*3,true);else if([3,4,9,10,11].includes(s))win('field',B.field,true);else lose('field');}
+    // hardways (off on the come-out)
+    for(const n of [4,6,8,10])if(has('h'+n)&&!co){if(s===n&&hard)win('h'+n,B['h'+n]*(n===4||n===10?7:9),true);else if(s===n||s===7)lose('h'+n);}
+    // big 6 / 8
+    if(has('b6')){if(s===6)win('b6',B.b6,true);else if(s===7)lose('b6');}
+    if(has('b8')){if(s===8)win('b8',B.b8,true);else if(s===7)lose('b8');}
+    // one-roll props (winners stay up)
+    if(has('a7')){if(s===7)win('a7',B.a7*4,true);else lose('a7');}
+    if(has('ac')){if(s===2||s===3||s===12)win('ac',B.ac*7,true);else lose('ac');}
+    for(const [k,n,x] of [['y2',2,30],['y3',3,15],['y11',11,15],['y12',12,30]])if(has(k)){if(s===n)win(k,B[k]*x,true);else lose(k);}
+    if(has('ce')){if(s===2||s===3||s===12)win('ce',B.ce,true);else if(s===11)win('ce',B.ce*3,true);else lose('ce');}
+    p.bank=bank;out[seat]=ev;
+  });
+  let sevenOut=false,pointMade=false,newPoint=null;
+  if(co){if(NUMS.includes(s)){st.point=s;newPoint=s;}}
+  else if(s===pt){st.point=null;pointMade=true;}
+  else if(s===7){st.point=null;sevenOut=true;}
+  return {s,d:[d1,d2],co,pt,sevenOut,pointMade,newPoint,out};
+}
+function describeRoll(r){
+  const s=r.s,hard=r.d[0]===r.d[1]&&[4,6,8,10].includes(s);
+  if(r.co){
+    if(s===7||s===11)return [`${s} – Winner!`,'Front line winner on the come-out.'];
+    if(s===2||s===3||s===12)return [`${s} – Craps!`,s===12?"Pass loses, Don't Pass pushes on 12.":'Pass loses, Don\'t Pass wins.'];
+    return [`Point is ${s}`,`${hard?'Hard '+s+'. ':''}Shooter needs another ${s} before a 7.`];
+  }
+  if(r.pointMade)return [`${s} – Point made!`,`${hard?'Hard way! ':''}Pass line wins. New come-out roll.`];
+  if(r.sevenOut)return ['7 – Seven out','Line away. Dice pass to the next shooter.'];
+  const names={2:'Aces',3:'Ace-Deuce',11:'Yo-leven',12:'Boxcars'};
+  return [`${names[s]||s}${hard?' the hard way':''}`,`Point is still ${r.pt}.`];
+}
+
+/* ===================== utils ===================== */
+const $=s=>document.querySelector(s);
+const store={get(k){try{return localStorage.getItem(k)}catch(e){return null}},set(k,v){try{localStorage.setItem(k,v)}catch(e){}},del(k){try{localStorage.removeItem(k)}catch(e){}}};
+const esc=s=>String(s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const rid=n=>{const a=new Uint8Array(n);crypto.getRandomValues(a);return Array.from(a,b=>'abcdefghijkmnpqrstuvwxyz23456789'[b%32]).join('');};
+const die=()=>{const a=new Uint32Array(1);do{crypto.getRandomValues(a)}while(a[0]>=4294967292);return a[0]%6+1;};
+let toastT;function toast(t){const el=$('#toast');el.textContent=t;el.classList.add('show');clearTimeout(toastT);toastT=setTimeout(()=>el.classList.remove('show'),2600);}
+let PID=store.get('crp-pid');if(!PID){PID=rid(12);store.set('crp-pid',PID);}
+
+/* ===================== sound ===================== */
+let soundOn=store.get('crp-sound')!=='0',actx=null;
+function snd(type){
+  if(!soundOn)return;
+  try{
+    actx=actx||new (window.AudioContext||window.webkitAudioContext)();
+    const t=actx.currentTime;
+    if(type==='dice'){for(let i=0;i<7;i++){const o=actx.createOscillator(),g=actx.createGain();o.type='square';o.frequency.value=900+Math.random()*900;const s=t+i*0.09+Math.random()*0.03;g.gain.setValueAtTime(.05,s);g.gain.exponentialRampToValueAtTime(.0001,s+.04);o.connect(g).connect(actx.destination);o.start(s);o.stop(s+.05);}}
+    else{const o=actx.createOscillator(),g=actx.createGain();o.type='sine';o.frequency.setValueAtTime(type==='win'?660:880,t);if(type==='win')o.frequency.setValueAtTime(990,t+.09);g.gain.setValueAtTime(.12,t);g.gain.exponentialRampToValueAtTime(.0001,t+.25);o.connect(g).connect(actx.destination);o.start(t);o.stop(t+.3);}
+  }catch(e){}
+}
+$('#soundBtn').textContent=soundOn?'🔊':'🔇';
+$('#soundBtn').onclick=()=>{soundOn=!soundOn;store.set('crp-sound',soundOn?'1':'0');$('#soundBtn').textContent=soundOn?'🔊':'🔇';};
+
+/* ===================== networking ===================== */
+let role=null, tableId=null, peer=null, conns=new Set(), hostConn=null, mySeat=null;
+let ST=null;          // authoritative on host, mirror on guest
+let myName=store.get('crp-name')||'';
+function peerOpts(){
+  const ps=new URLSearchParams(location.search).get('ps');
+  if(ps){const [h,p]=ps.split(':');return {host:h,port:+p,path:'/',secure:false,config:{iceServers:[]}};}
+  return {};
+}
+function setNet(text,color){$('#netText').textContent=text;$('#netStatus .dot').style.background=color||'var(--muted)';}
+const inviteLink=()=>location.href.split('#')[0]+'#t='+tableId;
+
+// ---------- host ----------
+function newState(){
+  return {v:1,players:[{name:myName,pid:PID,bank:START_BANK,rebuys:0,connected:true}],bets:[{}],shooter:0,point:null,rolling:false,roll:null,history:[],chat:[],seq:0};
+}
+function hostStart(restore){
+  role='host';mySeat=0;
+  if(!restore){ST=newState();sysMsg(`${myName} opened the table.`);}
+  ST.players[0].connected=true;ST.players[0].name=myName;ST.rolling=false;
+  if(ST.players[1])ST.players[1].connected=false;
+  store.set('crp-host-'+tableId,'1');
+  $('#inviteBtn').hidden=false;
+  saveHost();render();
+  let retries=0;
+  const open=()=>{
+    if(peer&&!peer.destroyed)peer.destroy();
+    setNet('Opening table…');
+    peer=new Peer(tableId,peerOpts());
+    peer.on('open',()=>{retries=0;setNet(ST.players[1]&&ST.players[1].connected?'Friend connected':'Table open – waiting for your friend','var(--gold)');});
+    peer.on('connection',c=>{
+      c.on('data',d=>hostData(c,d));
+      c.on('close',()=>hostDrop(c));
+      c.on('error',()=>hostDrop(c));
+    });
+    peer.on('disconnected',()=>{setNet('Reconnecting…','var(--red)');setTimeout(()=>{if(peer&&!peer.destroyed&&peer.disconnected)peer.reconnect();},2000);});
+    peer.on('error',e=>{
+      if(e.type==='unavailable-id'){setNet('Re-opening table…','var(--red)');if(retries++<30)setTimeout(open,3000);else setNet('This table is open in another tab or browser','var(--red)');}
+      else if(['network','server-error','socket-error','socket-closed'].includes(e.type)){setNet('Connection problem – retrying…','var(--red)');setTimeout(open,4000);}
+    });
+  };
+  open();
+}
+function hostData(c,d){
+  if(!d||typeof d!=='object')return;
+  if(d.t==='hello'){
+    const name=String(d.name||'Friend').slice(0,16);
+    let seat=null;
+    if(d.pid===PID)seat=null;
+    else if(!ST.players[1]||ST.players[1].pid===d.pid||!ST.players[1].connected)seat=1;
+    if(seat===null){c.send({t:'full'});setTimeout(()=>c.close(),500);return;}
+    for(const o of conns)if(o!==c&&o.seat===1){o.seat=null;try{o.send({t:'replaced'});o.close();}catch(e){}conns.delete(o);}
+    c.seat=1;conns.add(c);
+    const existing=ST.players[1];
+    if(existing&&existing.pid===d.pid){existing.connected=true;existing.name=name;sysMsg(`${name} is back at the table.`);}
+    else{
+      if(existing)sysMsg(`${existing.name}'s seat was taken over by ${name}.`);
+      ST.players[1]={name,pid:d.pid,bank:existing?existing.bank:START_BANK,rebuys:existing?existing.rebuys:0,connected:true};
+      if(!existing){ST.bets[1]={};sysMsg(`${name} joined the table with ${money(START_BANK)}.`);}
+    }
+    c.send({t:'welcome',seat:1});
+    setNet('Friend connected','var(--green)');
+    changed();return;
+  }
+  if(c.seat==null)return;
+  hostAct(c.seat,d);
+}
+function hostDrop(c){
+  if(!conns.has(c))return;conns.delete(c);
+  if(c.seat===1&&ST.players[1]){ST.players[1].connected=false;sysMsg(`${ST.players[1].name} left the table.`);setNet('Friend disconnected – they can reopen the link','var(--gold)');changed();}
+}
+function sysMsg(text){ST.chat.push({sys:1,text,ts:Date.now()});if(ST.chat.length>120)ST.chat.splice(0,ST.chat.length-120);}
+function canRoll(st,seat){
+  if(st.rolling)return false;
+  const sh=st.players[st.shooter];
+  return seat===st.shooter||!sh||!sh.connected;
+}
+function hostAct(seat,d){
+  const p=ST.players[seat];if(!p)return;
+  const reply=msg=>{if(seat===0)toast(msg);else for(const c of conns)if(c.seat===seat)c.send({t:'err',msg});};
+  if(d.t==='bet'){
+    const k=String(d.k),amt=Math.floor(+d.a);
+    if(!(amt>0))return;
+    const err=canBet(ST,seat,k,amt);if(err)return reply(err);
+    p.bank-=amt;ST.bets[seat][k]=(ST.bets[seat][k]||0)+amt;changed();
+  } else if(d.t==='remove'){
+    const k=String(d.k),B=ST.bets[seat];
+    if(!B[k])return;
+    const err=canRemove(ST,k);if(err)return reply(err);
+    const linked={dp:'dpo',pass:'po'}[k]||(k.match(/^d(\d+)$/)?'do'+k.slice(1):null);
+    p.bank+=B[k];delete B[k];
+    if(linked&&B[linked]){p.bank+=B[linked];delete B[linked];}
+    changed();
+  } else if(d.t==='clear'){
+    const B=ST.bets[seat];let n=0;
+    for(const k of Object.keys(B))if(!canRemove(ST,k)&&!/^d\d+$/.test(k)&&!(k==='dp'&&ST.point!==null)){p.bank+=B[k];delete B[k];n++;}
+    if(n)changed();
+  } else if(d.t==='rebuy'){
+    const onTable=Object.values(ST.bets[seat]).reduce((a,b)=>a+b,0);
+    if(p.bank+onTable>=25)return reply('Rebuys are for when you are (nearly) broke');
+    p.bank+=START_BANK;p.rebuys++;sysMsg(`${p.name} bought in for another ${money(START_BANK)}.`);changed();
+  } else if(d.t==='chat'){
+    const text=String(d.text||'').trim().slice(0,300);if(!text)return;
+    ST.chat.push({seat,name:p.name,text,ts:Date.now()});if(ST.chat.length>120)ST.chat.splice(0,ST.chat.length-120);changed();
+  } else if(d.t==='roll'){
+    if(!canRoll(ST,seat))return reply(ST.rolling?'Dice are already rolling':'Only the shooter can roll');
+    const d1=die(),d2=die();
+    const shooterName=p.name;
+    const r=settle(ST,d1,d2);
+    ST.rolling=true;ST.seq++;
+    ST.roll={id:ST.seq,by:seat,d:[d1,d2],s:r.s,co:r.co,pt:r.pt,sevenOut:r.sevenOut,pointMade:r.pointMade,out:r.out};
+    ST.history.unshift(r.s);ST.history=ST.history.slice(0,18);
+    const [h]=describeRoll(r);
+    let line=`🎲 ${shooterName} rolled ${r.s} (${d1}+${d2}): ${h}${/[.!]$/.test(h)?'':'.'}`;
+    const nets=Object.entries(r.out).map(([s,ev])=>{const n=ev.reduce((a,e)=>a+e.d,0);return n?`${ST.players[s].name} ${n>0?'+':''}${money(n)}`:null;}).filter(Boolean);
+    if(nets.length)line+=' '+nets.join(', ')+'.';
+    sysMsg(line);
+    if(r.sevenOut){
+      const next=ST.players.findIndex((pl,i)=>i!==ST.shooter&&pl&&pl.connected);
+      if(next>=0){ST.shooter=next;sysMsg(`Dice pass to ${ST.players[next].name}.`);}
+    }
+    changed();
+    setTimeout(()=>{ST.rolling=false;changed();},1500);
+  }
+}
+let saveT;
+function saveHost(){clearTimeout(saveT);saveT=setTimeout(()=>store.set('crp-state-'+tableId,JSON.stringify(ST)),200);}
+function changed(){
+  const msg={t:'state',st:ST};
+  for(const c of conns){try{if(c.open)c.send(msg);}catch(e){}}
+  saveHost();
+  incoming(JSON.parse(JSON.stringify(ST)));
+}
+
+// ---------- guest ----------
+let connTimer=null,connectAttempt=0,gotWelcome=false;
+function guestStart(){
+  role='guest';
+  setNet('Connecting to the table…');
+  peer=new Peer(peerOpts());
+  peer.on('open',()=>tryConnect());
+  peer.on('disconnected',()=>{setTimeout(()=>{if(peer&&!peer.destroyed&&peer.disconnected)peer.reconnect();},2000);});
+  peer.on('error',e=>{
+    if(e.type==='peer-unavailable'){setNet('Host is offline – waiting for them to open the table…','var(--red)');schedule(4000);}
+    else if(['network','server-error','socket-error','socket-closed'].includes(e.type)){setNet('Connection problem – retrying…','var(--red)');schedule(5000);}
+  });
+}
+function schedule(ms){clearTimeout(connTimer);connTimer=setTimeout(tryConnect,ms);}
+function tryConnect(){
+  clearTimeout(connTimer);
+  if(!peer||peer.destroyed)return;
+  if(peer.disconnected){peer.reconnect();schedule(3000);return;}
+  if(hostConn&&hostConn.open)return;
+  const attempt=++connectAttempt;
+  const c=peer.connect(tableId,{reliable:true});
+  const giveUp=setTimeout(()=>{if(attempt===connectAttempt&&!c.open){try{c.close();}catch(e){}setNet('Still trying to reach the host…','var(--red)');schedule(1000);}},10000);
+  c.on('open',()=>{clearTimeout(giveUp);hostConn=c;c.send({t:'hello',name:myName,pid:PID});});
+  c.on('data',d=>{
+    if(!d)return;
+    if(d.t==='welcome'){mySeat=d.seat;gotWelcome=true;setNet('Connected','var(--green)');}
+    else if(d.t==='state'){incoming(d.st);}
+    else if(d.t==='err')toast(d.msg);
+    else if(d.t==='full'){setNet('Table is full','var(--red)');showModal(`<h2>Table is full</h2><p>This table already has two players. Ask the host for a new link.</p>`);peer.destroy();}
+    else if(d.t==='replaced'){setNet('You joined from another tab','var(--red)');peer.destroy();}
+  });
+  c.on('close',()=>{clearTimeout(giveUp);if(hostConn===c){hostConn=null;setNet('Lost the host – reconnecting…','var(--red)');schedule(3000);}});
+  c.on('error',()=>{});
+}
+function send(d){
+  if(role==='host')hostAct(0,d);
+  else if(hostConn&&hostConn.open)hostConn.send(d);
+  else toast('Not connected to the table right now');
+}
+
+/* ===================== rendering ===================== */
+let shownRoll=0,animating=false,pending=null,view=null,firstState=true,lastChatLen=0;
+const PIPS={1:[4],2:[0,8],3:[0,4,8],4:[0,2,6,8],5:[0,2,4,6,8],6:[0,2,3,5,6,8]};
+function setDie(el,v){el.innerHTML=Array.from({length:9},(_,i)=>`<i class="${PIPS[v].includes(i)?'on':''}"></i>`).join('');}
+setDie($('#d1'),5);setDie($('#d2'),2);
+function incoming(st){
+  if(firstState){firstState=false;shownRoll=st.roll?st.roll.id:0;apply(st);return;}
+  if(st.roll&&st.roll.id!==shownRoll){
+    pending=st;if(animating)return;
+    animating=true;snd('dice');
+    const a=$('#d1'),b=$('#d2');a.classList.add('roll');b.classList.add('roll');
+    $('#rollText').textContent='Rolling…';$('#rollSub').textContent=`${(st.players[st.roll.by]||{}).name||''} is shooting`;
+    const iv=setInterval(()=>{setDie(a,1+Math.floor(Math.random()*6));setDie(b,1+Math.floor(Math.random()*6));},90);
+    setTimeout(()=>{clearInterval(iv);a.classList.remove('roll');b.classList.remove('roll');animating=false;const s=pending;pending=null;shownRoll=s.roll.id;apply(s,true);},1100);
+    return;
+  }
+  if(animating){pending=st;return;}
+  apply(st);
+}
+function apply(st,fresh){
+  view=st;
+  if(st.roll){setDie($('#d1'),st.roll.d[0]);setDie($('#d2'),st.roll.d[1]);
+    const [h,sub]=describeRoll(st.roll);$('#rollText').textContent=h;$('#rollSub').textContent=sub;}
+  if(fresh&&st.roll){
+    const ev=(st.roll.out||{})[mySeat]||[];let net=0;
+    for(const e of ev){net+=e.d;if(e.d!==0)floatOn(e.k,e.d);}
+    if(net>0)snd('win');
+  }
+  render();
+}
+function areaFor(k){let m;if((m=k.match(/^(pl|co|c|do|d)(\d+)$/)))return document.querySelector(`.area[data-k="pl${m[2]}"]`);return document.querySelector(`.area[data-k="${k}"]`);}
+function floatOn(k,d){
+  const el=areaFor(k);if(!el)return;
+  const f=document.createElement('div');f.className='float';f.style.color=d>0?'#9dffb9':'#ff9a8f';f.textContent=(d>0?'+':'')+money(d);
+  el.appendChild(f);setTimeout(()=>f.remove(),1900);
+  if(d>0){el.classList.remove('flash-win');void el.offsetWidth;el.classList.add('flash-win');}
+}
+
+// build static table
+function areaHTML(k,inner,cls,tip){return `<div class="area ${cls||''}" data-k="${k}" title="${esc(tip||'')}">${inner}<div class="chips"></div></div>`;}
+function buildTable(){
+  const g=$('#mainGrid');let h='';
+  h+=`<div class="area" data-k="dc" style="grid-row:1;grid-column:1" title="Don't Come: like Don't Pass, for the next roll. 2/3 win, 12 pushes, 7/11 lose; otherwise moves behind the number. Pays 1:1."><div class="lbl" style="font-size:13px">Don't<br>Come</div><div class="pay">Bar 12</div><div class="chips"></div></div>`;
+  for(const n of NUMS){
+    const pp=PLACE_PAY[n];
+    h+=`<div class="area num" data-k="pl${n}" data-n="${n}" title="Place ${n}: wins if ${n} rolls before a 7. Pays ${pp[0]}:${pp[1]}${n===6||n===8?' (bet multiples of $6)':' (bet multiples of $5)'}. Off on come-out rolls."><div class="big">${n===6?'SIX':n===9?'NINE':n}</div><div class="pay">Place ${pp[0]}:${pp[1]}</div><div class="chips"></div></div>`;
+  }
+  h+=`<div class="area" data-k="come" style="grid-row:2;grid-column:1 / span 7" title="Come: works like the Pass Line, starting on the next roll. 7/11 win, 2/3/12 lose, any other number becomes your Come point. Pays 1:1."><div class="lbl" style="font-size:22px">Come</div><div class="chips"></div></div>`;
+  h+=`<div class="area" data-k="field" style="grid-row:3;grid-column:1 / span 7" title="Field: one roll. 3, 4, 9, 10, 11 pay 1:1. 2 pays 2:1, 12 pays 3:1. 5, 6, 7, 8 lose."><div class="lbl" style="font-size:20px">Field</div><div class="pay" style="font-size:13px">2 pays double · 3 · 4 · 9 · 10 · 11 · 12 pays triple</div><div class="chips"></div></div>`;
+  h+=`<div class="area" data-k="b6" style="grid-row:4;grid-column:1" title="Big 6: wins if 6 rolls before 7. Pays 1:1."><div class="lbl" style="font-size:13px">Big 6</div><div class="chips"></div></div>`;
+  h+=`<div class="area" data-k="dp" style="grid-row:4;grid-column:2 / span 4" title="Don't Pass: placed on the come-out. 2/3 win, 12 pushes, 7/11 lose. After a point: wins if 7 comes before the point. Pays 1:1."><div class="lbl">Don't Pass Bar <span style="font-size:12px">· 12 push</span></div><div class="chips"></div></div>`;
+  h+=`<div class="area" data-k="dpo" style="grid-row:4;grid-column:6 / span 2" title="Lay Odds behind Don't Pass (up to 6x). Pays 1:2 on 4/10, 2:3 on 5/9, 5:6 on 6/8. Zero house edge."><div class="lbl" style="font-size:12px">Lay Odds</div><div class="chips"></div></div>`;
+  h+=`<div class="area" data-k="b8" style="grid-row:5;grid-column:1" title="Big 8: wins if 8 rolls before 7. Pays 1:1."><div class="lbl" style="font-size:13px">Big 8</div><div class="chips"></div></div>`;
+  h+=`<div class="area" data-k="pass" style="grid-row:5;grid-column:2 / span 4" title="Pass Line: placed on the come-out. 7/11 win, 2/3/12 lose. Any other number becomes the point: win if it rolls again before a 7. Pays 1:1."><div class="lbl" style="font-size:20px">Pass Line</div><div class="chips"></div></div>`;
+  h+=`<div class="area" data-k="po" style="grid-row:5;grid-column:6 / span 2" title="Pass Odds behind the Pass Line (3x on 4/10, 4x on 5/9, 5x on 6/8). Pays 2:1 on 4/10, 3:2 on 5/9, 6:5 on 6/8. Zero house edge."><div class="lbl" style="font-size:12px">Pass Odds</div><div class="chips"></div></div>`;
+  g.innerHTML=h;
+  let p='<div class="ptitle">Proposition bets</div>';
+  p+=areaHTML('a7','<div class="lbl">Any Seven</div><div class="pay">4 to 1 · one roll</div>','wide','Any Seven: one roll, wins on any 7. Pays 4:1.');
+  p+=areaHTML('h6','<div class="lbl">Hard 6</div><div class="pay">9 to 1</div>','','Hard 6 (3+3) before an easy 6 or a 7. Pays 9:1. Off on come-out.');
+  p+=areaHTML('h10','<div class="lbl">Hard 10</div><div class="pay">7 to 1</div>','','Hard 10 (5+5) before an easy 10 or a 7. Pays 7:1. Off on come-out.');
+  p+=areaHTML('h8','<div class="lbl">Hard 8</div><div class="pay">9 to 1</div>','','Hard 8 (4+4) before an easy 8 or a 7. Pays 9:1. Off on come-out.');
+  p+=areaHTML('h4','<div class="lbl">Hard 4</div><div class="pay">7 to 1</div>','','Hard 4 (2+2) before an easy 4 or a 7. Pays 7:1. Off on come-out.');
+  p+=areaHTML('y2','<div class="lbl">⚀⚀ 2</div><div class="pay">30 to 1</div>','','Aces: one roll, wins on 2. Pays 30:1.');
+  p+=areaHTML('y12','<div class="lbl">⚅⚅ 12</div><div class="pay">30 to 1</div>','','Boxcars: one roll, wins on 12. Pays 30:1.');
+  p+=areaHTML('y3','<div class="lbl">⚀⚁ 3</div><div class="pay">15 to 1</div>','','Ace-Deuce: one roll, wins on 3. Pays 15:1.');
+  p+=areaHTML('y11','<div class="lbl">⚄⚅ 11</div><div class="pay">15 to 1</div>','','Yo-leven: one roll, wins on 11. Pays 15:1.');
+  p+=areaHTML('ac','<div class="lbl">Any Craps</div><div class="pay">7 to 1 · 2, 3 or 12</div>','wide','Any Craps: one roll, wins on 2, 3 or 12. Pays 7:1.');
+  p+=areaHTML('ce','<div class="lbl">C &amp; E</div><div class="pay">Craps 3:1 · Eleven 7:1</div>','wide','C & E: one roll, split between Any Craps and Eleven. Even amounts only. Nets 1x on craps, 3x on 11.');
+  $('#propGrid').innerHTML=p;
+  document.querySelectorAll('.area').forEach(el=>{
+    el.addEventListener('click',e=>{
+      if(e.target.closest('.oddsbtn'))return;
+      if(e.shiftKey){send({t:'remove',k:el.dataset.k});return;}
+      send({t:'bet',k:el.dataset.k,a:chip});
+    });
+    el.addEventListener('contextmenu',e=>{e.preventDefault();if(e.target.closest('.oddsbtn'))return;send({t:'remove',k:el.dataset.k});});
+  });
+}
+let chip=+(store.get('crp-chip')||5);
+function buildChips(){
+  $('#chipsel').innerHTML=CHIPS.map(v=>`<div class="cs${v===chip?' sel':''}" data-v="${v}" style="background:${CHIP_COL[v]}">$${v}</div>`).join('');
+  document.querySelectorAll('.cs').forEach(el=>el.onclick=()=>{chip=+el.dataset.v;store.set('crp-chip',chip);buildChips();});
+}
+function chipTag(seat,amt,lab,extra){
+  return `<span class="chip s${seat}" title="${esc((view.players[seat]||{}).name||'')}">${lab?`<small>${lab}</small> `:''}${money(amt)}${extra?` <small>+${money(extra)}</small>`:''}</span>`;
+}
+function render(){
+  const st=view;if(!st)return;
+  // areas
+  document.querySelectorAll('.area').forEach(el=>{
+    const k=el.dataset.k;let html='';
+    st.players.forEach((p,seat)=>{
+      if(!p)return;const B=st.bets[seat]||{};
+      if(el.classList.contains('num')){
+        const n=el.dataset.n;
+        if(B['pl'+n])html+=chipTag(seat,B['pl'+n],'Place');
+        if(B['c'+n])html+=chipTag(seat,B['c'+n],'Come',B['co'+n]);
+        if(B['d'+n])html+=chipTag(seat,B['d'+n],'DC',B['do'+n]);
+      } else if(B[k])html+=chipTag(seat,B[k]);
+    });
+    el.querySelector('.chips').innerHTML=html;
+    if(el.classList.contains('num')){
+      const n=+el.dataset.n;
+      el.classList.toggle('point',st.point===n);
+      let pk=el.querySelector('.pk');
+      if(st.point===n){if(!pk){pk=document.createElement('div');pk.className='puck on pk';pk.textContent='ON';el.appendChild(pk);}}else if(pk)pk.remove();
+      el.querySelectorAll('.oddsbtn').forEach(b=>b.remove());
+      const B=st.bets[mySeat]||{};
+      for(const [base,ok,lab] of [['c','co','+ Odds'],['d','do','+ Lay']]){
+        if(B[base+n]){const b=document.createElement('button');b.className='oddsbtn';b.textContent=lab;b.title=`Add the selected chip as ${base==='c'?'odds':'lay odds'} on your ${base==='c'?'Come':"Don't Come"} bet. Right-click to take the odds down.`;
+          b.onclick=e=>{e.stopPropagation();send({t:'bet',k:ok+n,a:chip});};
+          b.oncontextmenu=e=>{e.preventDefault();e.stopPropagation();send({t:'remove',k:ok+n});};
+          el.appendChild(b);break;}
+      }
+    }
+    el.classList.toggle('locked',!!st.rolling);
+  });
+  // puck & history
+  const pk=$('#puck');pk.className='puck '+(st.point?'on':'off');pk.textContent=st.point?'ON':'OFF';
+  $('#history').innerHTML=st.history.map(s=>`<span class="${s===7?'seven':''}">${s}</span>`).join('');
+  if(!st.roll){$('#rollText').textContent='Place your bets';$('#rollSub').textContent='Come-out roll: put chips on the Pass Line or Don\'t Pass.';}
+  // players
+  $('#pcards').innerHTML=st.players.map((p,seat)=>{
+    if(!p)return '';
+    const onT=Object.values(st.bets[seat]||{}).reduce((a,b)=>a+b,0);
+    const net=p.bank+onT-START_BANK*(1+p.rebuys);
+    return `<div class="pcard${st.shooter===seat?' shooter':''}"><span class="sw" style="background:var(--s${seat})"></span>
+      <span class="nm">${esc(p.name)}${seat===mySeat?' <span style="color:var(--muted);font-weight:400;font-size:12px">(you)</span>':''}${st.shooter===seat?' 🎲':''}</span>
+      <span class="bk">${money(p.bank)}</span>
+      <div class="sub"><span>On table ${money(onT)} · ${net>=0?'up':'down'} <b style="color:${net>=0?'var(--green)':'var(--red)'}">${money(Math.abs(net))}</b>${p.rebuys?` · ${p.rebuys} rebuy${p.rebuys>1?'s':''}`:''}</span><span class="${p.connected?'':'off'}">${p.connected?'● online':'○ away'}</span></div></div>`;
+  }).join('')+(st.players[1]?'':`<div class="pcard" style="grid-template-columns:1fr"><span style="color:var(--muted)">Waiting for your friend… <a href="#" id="inv2" style="color:var(--gold)">copy invite link</a></span></div>`);
+  const inv2=$('#inv2');if(inv2)inv2.onclick=e=>{e.preventDefault();showInvite();};
+  // roll button
+  const rb=$('#rollBtn'),me=st.players[mySeat];
+  const sh=st.players[st.shooter];
+  if(mySeat===null||!me){rb.disabled=true;rb.textContent='Connecting…';}
+  else if(st.rolling||animating){rb.disabled=true;rb.textContent='Dice are rolling…';}
+  else if(canRoll(st,mySeat)){rb.disabled=false;rb.textContent=st.shooter===mySeat?'🎲 Roll the dice':`🎲 Roll for ${sh?sh.name:'shooter'} (away)`;}
+  else{rb.disabled=true;rb.textContent=`${sh.name} is shooting`;}
+  const onT=me?Object.values(st.bets[mySeat]||{}).reduce((a,b)=>a+b,0):0;
+  $('#rebuyBtn').disabled=!me||me.bank+onT>=25;
+  // chat
+  const log=$('#chatLog');
+  if(st.chat.length!==lastChatLen||log.childElementCount===0){
+    const atBottom=log.scrollHeight-log.scrollTop-log.clientHeight<40;
+    const newOnes=st.chat.slice(lastChatLen);
+    log.innerHTML=st.chat.map(m=>m.sys?`<div class="m sys">${esc(m.text)}</div>`:`<div class="m"><b style="color:var(--s${m.seat})">${esc(m.name)}:</b> ${esc(m.text)}</div>`).join('');
+    if(atBottom||lastChatLen===0)log.scrollTop=log.scrollHeight;
+    if(lastChatLen&&newOnes.some(m=>!m.sys&&m.seat!==mySeat)){snd('chat');if(document.hidden)flashTitle();}
+    lastChatLen=st.chat.length;
+  }
+}
+let titleT=null;
+function flashTitle(){if(titleT)return;let on=false;titleT=setInterval(()=>{document.title=(on=!on)?'💬 New message':'Craps Live';},900);}
+document.addEventListener('visibilitychange',()=>{if(!document.hidden&&titleT){clearInterval(titleT);titleT=null;document.title='Craps Live';}});
+
+/* ===================== controls ===================== */
+$('#rollBtn').onclick=()=>send({t:'roll'});
+$('#clearBtn').onclick=()=>send({t:'clear'});
+$('#rebuyBtn').onclick=()=>send({t:'rebuy'});
+$('#chatForm').onsubmit=e=>{e.preventDefault();const v=$('#chatIn').value.trim();if(!v)return;send({t:'chat',text:v});$('#chatIn').value='';};
+window.addEventListener('keydown',e=>{if(e.target.tagName==='INPUT')return;if(e.code==='Space'&&!$('#rollBtn').disabled){e.preventDefault();send({t:'roll'});}});
+function showModal(html){$('#mbox').innerHTML=html;$('#modal').hidden=false;}
+function hideModal(){$('#modal').hidden=true;}
+$('#modal').addEventListener('click',e=>{if(e.target.id==='modal')hideModal();});
+async function copyText(t,btn){
+  let ok=false;try{await navigator.clipboard.writeText(t);ok=true;}catch(e){const ta=document.createElement('textarea');ta.value=t;document.body.appendChild(ta);ta.select();try{ok=document.execCommand('copy');}catch(_){}ta.remove();}
+  const s=btn&&btn.parentElement.querySelector('.copied');if(s)s.textContent=ok?'Copied!':'Select the link and copy it';
+}
+function showInvite(){
+  const link=inviteLink(),msg=`🎲 Come shoot craps with me (live, no sign-in): ${link}`;
+  showModal(`<h2>Invite your friend</h2><p>Paste this into Google Chat. When they open it, they'll join your table live. Keep this tab open while you play.</p>
+    <input type="text" readonly id="linkBox" value="${esc(link)}">
+    <div class="row" style="justify-content:flex-start"><button class="primary" id="cm">Copy message + link</button><button id="cl">Copy link only</button><span class="copied"></span></div>
+    <div class="row"><button id="closeM">Close</button></div>`);
+  $('#linkBox').onclick=e=>e.target.select();
+  $('#cm').onclick=e=>copyText(msg,e.target);$('#cl').onclick=e=>copyText(link,e.target);$('#closeM').onclick=hideModal;
+}
+$('#inviteBtn').onclick=showInvite;
+$('#helpBtn').onclick=()=>{
+  showModal(`<h2>How to play craps</h2><ul>
+  <li><b>Come-out roll</b> (puck OFF): bet the <b>Pass Line</b>. 7 or 11 wins, 2/3/12 (craps) loses. Any other number becomes the <b>point</b> and the puck turns ON.</li>
+  <li><b>Point is ON:</b> the shooter keeps rolling. Rolling the point again wins the Pass Line. A <b>7 loses</b> ("seven out") and the dice pass to the other player.</li>
+  <li><b>Odds:</b> once a point is on, add <b>Pass Odds</b> behind your Pass Line. It pays true odds, the best bet in the casino.</li>
+  <li><b>Come</b> works like a new Pass Line bet in the middle of a point. Your chip moves to whatever number rolls next, and an <b>+ Odds</b> button appears on that number.</li>
+  <li><b>Don't Pass / Don't Come</b> are the opposite: you're betting on the 7.</li>
+  <li><b>Place bets</b> (click a number) win whenever that number rolls before a 7. They're off on come-out rolls.</li>
+  <li><b>Field</b> and the <b>proposition bets</b> on the right are decided in one roll. Hardways stay up until the number rolls easy or a 7 shows.</li>
+  <li>Winning bets that stay on the table keep working. Right-click an area to take a bet down. Pass Line and Come bets can't come down once they're on a point.</li>
+  <li>Shooter: press <b>Roll</b> or the space bar. If the shooter is away, the other player can roll for them.</li>
+  </ul><div class="row"><button id="closeM">Got it</button></div>`);
+  $('#closeM').onclick=hideModal;
+};
+$('#newBtn').onclick=()=>{if(role&&!confirm('Leave this table and open a new one?'))return;location.href=location.href.split('#')[0];};
+
+/* ===================== boot ===================== */
+function enterGame(){$('#lobby').hidden=true;$('#game').hidden=false;buildTable();buildChips();}
+function askName(title,sub){
+  return new Promise(res=>{
+    showModal(`<h2>${title}</h2><p>${sub}</p><input type="text" id="nm" maxlength="16" value="${esc(myName)}" placeholder="Your name"><div class="row"><button class="primary" id="ok">Join table</button></div>`);
+    const done=()=>{const v=$('#nm').value.trim().slice(0,16);if(!v){$('#nm').focus();return;}myName=v;store.set('crp-name',v);hideModal();res();};
+    $('#ok').onclick=done;$('#nm').onkeydown=e=>{if(e.key==='Enter')done();};setTimeout(()=>$('#nm').focus(),50);
+  });
+}
+async function boot(){
+  if(typeof Peer==='undefined'){document.body.innerHTML='<p style="padding:30px">Could not load the networking library. Please refresh.</p>';return;}
+  const m=location.hash.match(/^#t=([a-z0-9-]+)$/i);
+  if(!m){$('#lobby').hidden=false;$('#nameIn').value=myName;return;}
+  tableId=m[1];
+  if(store.get('crp-host-'+tableId)==='1'){
+    let saved=null;try{saved=JSON.parse(store.get('crp-state-'+tableId));}catch(e){}
+    if(!myName)myName='Host';
+    enterGame();ST=saved||newState();if(!saved)sysMsg(`${myName} opened the table.`);hostStart(true);
+  } else {
+    if(!myName)await askName('Pull up a chair 🎲','Your friend invited you to a live craps table. What should we call you?');
+    enterGame();guestStart();render();
+  }
+}
+$('#createBtn').onclick=()=>{
+  const v=$('#nameIn').value.trim().slice(0,16);if(!v){$('#nameIn').focus();toast('Enter your name first');return;}
+  myName=v;store.set('crp-name',v);
+  tableId='craps-'+rid(10);
+  history.replaceState(null,'','#t='+tableId);
+  enterGame();hostStart(false);showInvite();
+};
+$('#nameIn').onkeydown=e=>{if(e.key==='Enter')$('#createBtn').click();};
+window.addEventListener('hashchange',()=>location.reload());
+boot();
+window.__cr={get st(){return view},get seat(){return mySeat},send,settle,canBet};
+</script>
+</body>
+</html>
