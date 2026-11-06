@@ -11,7 +11,7 @@
 <meta property="og:type" content="website">
 <meta name="twitter:card" content="summary_large_image">
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect x='6' y='6' width='52' height='52' rx='12' fill='%23c8102e'/%3E%3Cg fill='%23fff'%3E%3Ccircle cx='20' cy='20' r='6'/%3E%3Ccircle cx='32' cy='32' r='6'/%3E%3Ccircle cx='44' cy='44' r='6'/%3E%3C/g%3E%3C/svg%3E">
-<script src="peerjs.min.js"></script>
+<script src="mqtt.min.js"></script>
 <style>
 :root{
   --bg:#101418;--panel:#1a2027;--panel2:#232b34;--line:#33404d;--text:#e9eef3;--muted:#9aa8b6;
@@ -322,76 +322,123 @@ function snd(type){
 $('#soundBtn').textContent=soundOn?'🔊':'🔇';
 $('#soundBtn').onclick=()=>{soundOn=!soundOn;store.set('crp-sound',soundOn?'1':'0');$('#soundBtn').textContent=soundOn?'🔊':'🔇';};
 
-/* ===================== networking ===================== */
-let role=null, tableId=null, peer=null, conns=new Set(), hostConn=null, mySeat=null;
+/* ===================== networking (MQTT relay) ===================== */
+// Both browsers talk through public MQTT brokers (several at once for redundancy).
+// The host's browser is the authority: guests send actions up, host publishes state down.
+let role=null, tableId=null, mySeat=null;
 let ST=null;          // authoritative on host, mirror on guest
 let myName=store.get('crp-name')||'';
-function peerOpts(){
-  const ps=new URLSearchParams(location.search).get('ps');
-  if(ps){const [h,p]=ps.split(':');return {host:h,port:+p,path:'/',secure:false,config:{iceServers:[]}};}
-  return {};
-}
-function setNet(text,color){$('#netText').textContent=text;$('#netStatus .dot').style.background=color||'var(--muted)';}
+const QS=new URLSearchParams(location.search);
+const BROKERS=QS.get('mq')?QS.get('mq').split(',').map(url=>({url})):[
+  {url:'wss://broker.emqx.io:8084/mqtt'},
+  {url:'wss://broker.hivemq.com:8884/mqtt'},
+  {url:'wss://test.mosquitto.org:8081/mqtt'},
+  {url:'wss://public.cloud.shiftr.io',username:'public',password:'public'}, // port 443, for networks that block other ports
+];
+let clients=[], topicUp='', topicDown='';
+const seen=new Map();
+let lastHostSeen=0, lastGuestSeen=0, netTick=null;
+function setNet(text,color){const n=liveBrokers();$('#netText').textContent=text+(n&&clients.length?` · ${n}/${clients.length} servers`:'');$('#netStatus .dot').style.background=color||'var(--muted)';}
 const inviteLink=()=>location.href.split('#')[0]+'#t='+tableId;
+const liveBrokers=()=>clients.filter(c=>c.connected).length;
+function netStart(onMsg,onConnect){
+  topicUp=`crapslive/v1/${tableId}/up`;topicDown=`crapslive/v1/${tableId}/down`;
+  const sub=role==='host'?topicUp:topicDown;
+  for(const b of BROKERS){
+    let c;
+    const opts={clientId:'crp_'+rid(14),clean:true,reconnectPeriod:4000,connectTimeout:10000,keepalive:30,resubscribe:true};
+    if(b.username){opts.username=b.username;opts.password=b.password;}
+    try{c=mqtt.connect(b.url,opts);}
+    catch(e){continue;}
+    c.on('connect',()=>{c.subscribe(sub,{qos:0});onConnect(c);updateNet();});
+    c.on('message',(t,buf)=>{
+      let d;try{d=JSON.parse(typeof buf==='string'?buf:new TextDecoder().decode(buf));}catch(e){return;}
+      if(!d||typeof d!=='object'||!d.m)return;
+      if(seen.has(d.m))return;
+      seen.set(d.m,Date.now());
+      if(seen.size>800){const cut=Date.now()-120000;for(const [k,v] of seen)if(v<cut)seen.delete(k);}
+      onMsg(d);
+    });
+    for(const ev of ['close','offline','error','reconnect'])c.on(ev,()=>updateNet());
+    clients.push(c);
+  }
+  clearInterval(netTick);netTick=setInterval(netHeartbeat,2500);
+  window.addEventListener('pagehide',()=>publish(role==='host'?topicDown:topicUp,{t:'bye',from:PID}));
+}
+function publish(topic,obj,retain){
+  obj.m=rid(12);
+  const s=JSON.stringify(obj);let n=0;
+  for(const c of clients)if(c.connected){try{c.publish(topic,s,{qos:0,retain:!!retain});n++;}catch(e){}}
+  return n;
+}
+let hbCount=0;
+function netHeartbeat(){
+  hbCount++;
+  if(role==='host'){
+    if(hbCount%2===0)publish(topicDown,{t:'hb'});
+    const g=ST.players[1];
+    if(g&&g.connected&&Date.now()-lastGuestSeen>16000){g.connected=false;sysMsg(`${g.name} left the table.`);changed();}
+  } else {
+    if(hbCount%2===0)publish(topicUp,{t:'ping',from:PID,name:myName});
+  }
+  updateNet();
+}
+function updateNet(){
+  const n=liveBrokers();
+  if(n===0){setNet(clients.length?'Can\'t reach the game servers – retrying… (check your internet)':'Starting…','var(--red)');return;}
+  if(role==='host'){
+    const g=ST&&ST.players[1];
+    if(g&&g.connected)setNet(`${g.name} is connected`,'var(--green)');
+    else if(g)setNet(`${g.name} is away – they can reopen the link`,'var(--gold)');
+    else setNet('Table open – waiting for your friend','var(--gold)');
+  } else {
+    if(!lastHostSeen)setNet('Looking for the table…','var(--gold)');
+    else if(Date.now()-lastHostSeen>16000)setNet('Host is offline – waiting for them to reopen the table…','var(--red)');
+    else if(mySeat===null)setNet('Joining…','var(--gold)');
+    else setNet('Connected','var(--green)');
+  }
+}
 
 // ---------- host ----------
 function newState(){
-  return {v:1,players:[{name:myName,pid:PID,bank:START_BANK,rebuys:0,connected:true}],bets:[{}],shooter:0,point:null,rolling:false,roll:null,history:[],chat:[],seq:0};
+  return {v:1,ver:0,players:[{name:myName,pid:PID,bank:START_BANK,rebuys:0,connected:true}],bets:[{}],shooter:0,point:null,rolling:false,roll:null,history:[],chat:[],seq:0};
 }
 function hostStart(restore){
   role='host';mySeat=0;
   if(!restore){ST=newState();sysMsg(`${myName} opened the table.`);}
+  ST.ver=ST.ver||0;ST.sid=rid(6);
   ST.players[0].connected=true;ST.players[0].name=myName;ST.rolling=false;
   if(ST.players[1])ST.players[1].connected=false;
   store.set('crp-host-'+tableId,'1');
   $('#inviteBtn').hidden=false;
-  saveHost();render();
-  let retries=0;
-  const open=()=>{
-    if(peer&&!peer.destroyed)peer.destroy();
-    setNet('Opening table…');
-    peer=new Peer(tableId,peerOpts());
-    peer.on('open',()=>{retries=0;setNet(ST.players[1]&&ST.players[1].connected?'Friend connected':'Table open – waiting for your friend','var(--gold)');});
-    peer.on('connection',c=>{
-      c.on('data',d=>hostData(c,d));
-      c.on('close',()=>hostDrop(c));
-      c.on('error',()=>hostDrop(c));
-    });
-    peer.on('disconnected',()=>{setNet('Reconnecting…','var(--red)');setTimeout(()=>{if(peer&&!peer.destroyed&&peer.disconnected)peer.reconnect();},2000);});
-    peer.on('error',e=>{
-      if(e.type==='unavailable-id'){setNet('Re-opening table…','var(--red)');if(retries++<30)setTimeout(open,3000);else setNet('This table is open in another tab or browser','var(--red)');}
-      else if(['network','server-error','socket-error','socket-closed'].includes(e.type)){setNet('Connection problem – retrying…','var(--red)');setTimeout(open,4000);}
-    });
-  };
-  open();
+  saveHost();incoming(JSON.parse(JSON.stringify(ST)));
+  setNet('Opening table…');
+  netStart(hostMsg,c=>{try{c.publish(topicDown,JSON.stringify({t:'state',st:ST,m:rid(12)}),{qos:0,retain:true});}catch(e){}});
 }
-function hostData(c,d){
-  if(!d||typeof d!=='object')return;
-  if(d.t==='hello'){
-    const name=String(d.name||'Friend').slice(0,16);
-    let seat=null;
-    if(d.pid===PID)seat=null;
-    else if(!ST.players[1]||ST.players[1].pid===d.pid||!ST.players[1].connected)seat=1;
-    if(seat===null){c.send({t:'full'});setTimeout(()=>c.close(),500);return;}
-    for(const o of conns)if(o!==c&&o.seat===1){o.seat=null;try{o.send({t:'replaced'});o.close();}catch(e){}conns.delete(o);}
-    c.seat=1;conns.add(c);
-    const existing=ST.players[1];
-    if(existing&&existing.pid===d.pid){existing.connected=true;existing.name=name;sysMsg(`${name} is back at the table.`);}
-    else{
-      if(existing)sysMsg(`${existing.name}'s seat was taken over by ${name}.`);
-      ST.players[1]={name,pid:d.pid,bank:existing?existing.bank:START_BANK,rebuys:existing?existing.rebuys:0,connected:true};
-      if(!existing){ST.bets[1]={};sysMsg(`${name} joined the table with ${money(START_BANK)}.`);}
+function hostMsg(d){
+  if(d.from===PID||!d.from)return;
+  const pid=String(d.from);
+  const seat=ST.players.findIndex(p=>p&&p.pid===pid);
+  if(d.t==='bye'){if(seat===1&&ST.players[1].connected){ST.players[1].connected=false;sysMsg(`${ST.players[1].name} left the table.`);changed();}return;}
+  if(d.t==='hello'||(d.t==='ping'&&seat<0)){
+    const name=String(d.name||'Friend').slice(0,16)||'Friend';
+    const cur=ST.players[1];
+    if(cur&&cur.pid!==pid&&cur.connected){publish(topicDown,{t:'full',to:pid});return;}
+    lastGuestSeen=Date.now();
+    if(cur&&cur.pid===pid){
+      if(!cur.connected||cur.name!==name){cur.connected=true;cur.name=name;sysMsg(`${name} is back at the table.`);}
+    } else {
+      if(cur)sysMsg(`${cur.name}'s seat was taken over by ${name}.`);
+      ST.players[1]={name,pid,bank:cur?cur.bank:START_BANK,rebuys:cur?cur.rebuys:0,connected:true};
+      if(!cur){ST.bets[1]={};sysMsg(`${name} joined the table with ${money(START_BANK)}.`);}
     }
-    c.send({t:'welcome',seat:1});
-    setNet('Friend connected','var(--green)');
     changed();return;
   }
-  if(c.seat==null)return;
-  hostAct(c.seat,d);
-}
-function hostDrop(c){
-  if(!conns.has(c))return;conns.delete(c);
-  if(c.seat===1&&ST.players[1]){ST.players[1].connected=false;sysMsg(`${ST.players[1].name} left the table.`);setNet('Friend disconnected – they can reopen the link','var(--gold)');changed();}
+  if(seat!==1)return;
+  lastGuestSeen=Date.now();
+  if(!ST.players[1].connected){ST.players[1].connected=true;sysMsg(`${ST.players[1].name} is back at the table.`);changed();}
+  if(d.t==='ping')return;
+  hostAct(1,d);
 }
 function sysMsg(text){ST.chat.push({sys:1,text,ts:Date.now()});if(ST.chat.length>120)ST.chat.splice(0,ST.chat.length-120);}
 function canRoll(st,seat){
@@ -401,7 +448,7 @@ function canRoll(st,seat){
 }
 function hostAct(seat,d){
   const p=ST.players[seat];if(!p)return;
-  const reply=msg=>{if(seat===0)toast(msg);else for(const c of conns)if(c.seat===seat)c.send({t:'err',msg});};
+  const reply=msg=>{if(seat===0)toast(msg);else publish(topicDown,{t:'err',to:ST.players[seat].pid,msg});};
   if(d.t==='bet'){
     const k=String(d.k),amt=Math.floor(+d.a);
     if(!(amt>0))return;
@@ -450,50 +497,39 @@ function hostAct(seat,d){
 let saveT;
 function saveHost(){clearTimeout(saveT);saveT=setTimeout(()=>store.set('crp-state-'+tableId,JSON.stringify(ST)),200);}
 function changed(){
-  const msg={t:'state',st:ST};
-  for(const c of conns){try{if(c.open)c.send(msg);}catch(e){}}
-  saveHost();
+  ST.ver=(ST.ver||0)+1;
+  publish(topicDown,{t:'state',st:ST},true);
+  saveHost();updateNet();
   incoming(JSON.parse(JSON.stringify(ST)));
 }
 
 // ---------- guest ----------
-let connTimer=null,connectAttempt=0,gotWelcome=false;
+let lastVer=-1,lastSid='',fullShown=false,lastHelloAt=0;
 function guestStart(){
   role='guest';
-  setNet('Connecting to the table…');
-  peer=new Peer(peerOpts());
-  peer.on('open',()=>tryConnect());
-  peer.on('disconnected',()=>{setTimeout(()=>{if(peer&&!peer.destroyed&&peer.disconnected)peer.reconnect();},2000);});
-  peer.on('error',e=>{
-    if(e.type==='peer-unavailable'){setNet('Host is offline – waiting for them to open the table…','var(--red)');schedule(4000);}
-    else if(['network','server-error','socket-error','socket-closed'].includes(e.type)){setNet('Connection problem – retrying…','var(--red)');schedule(5000);}
-  });
+  setNet('Connecting…');
+  netStart(guestMsg,()=>publish(topicUp,{t:'hello',from:PID,name:myName}));
 }
-function schedule(ms){clearTimeout(connTimer);connTimer=setTimeout(tryConnect,ms);}
-function tryConnect(){
-  clearTimeout(connTimer);
-  if(!peer||peer.destroyed)return;
-  if(peer.disconnected){peer.reconnect();schedule(3000);return;}
-  if(hostConn&&hostConn.open)return;
-  const attempt=++connectAttempt;
-  const c=peer.connect(tableId,{reliable:true});
-  const giveUp=setTimeout(()=>{if(attempt===connectAttempt&&!c.open){try{c.close();}catch(e){}setNet('Still trying to reach the host…','var(--red)');schedule(1000);}},10000);
-  c.on('open',()=>{clearTimeout(giveUp);hostConn=c;c.send({t:'hello',name:myName,pid:PID});});
-  c.on('data',d=>{
-    if(!d)return;
-    if(d.t==='welcome'){mySeat=d.seat;gotWelcome=true;setNet('Connected','var(--green)');}
-    else if(d.t==='state'){incoming(d.st);}
-    else if(d.t==='err')toast(d.msg);
-    else if(d.t==='full'){setNet('Table is full','var(--red)');showModal(`<h2>Table is full</h2><p>This table already has two players. Ask the host for a new link.</p>`);peer.destroy();}
-    else if(d.t==='replaced'){setNet('You joined from another tab','var(--red)');peer.destroy();}
-  });
-  c.on('close',()=>{clearTimeout(giveUp);if(hostConn===c){hostConn=null;setNet('Lost the host – reconnecting…','var(--red)');schedule(3000);}});
-  c.on('error',()=>{});
+function guestMsg(d){
+  if(d.to&&d.to!==PID)return;
+  if(d.t==='state'){
+    lastHostSeen=Date.now();
+    const st=d.st;if(!st||typeof st.ver!=='number')return;
+    if(st.sid===lastSid&&st.ver<=lastVer)return;
+    lastSid=st.sid;lastVer=st.ver;
+    const s=st.players.findIndex(p=>p&&p.pid===PID);
+    const needHello=(s<0&&!(st.players[1]&&st.players[1].connected))||(s>=0&&!st.players[s].connected);
+    if(needHello&&Date.now()-lastHelloAt>1500){lastHelloAt=Date.now();publish(topicUp,{t:'hello',from:PID,name:myName});}
+    mySeat=s<0?null:s;
+    incoming(st);updateNet();
+  } else if(d.t==='hb'){const was=Date.now()-lastHostSeen>16000;lastHostSeen=Date.now();if(was)publish(topicUp,{t:'hello',from:PID,name:myName});updateNet();}
+  else if(d.t==='bye'){lastHostSeen=1;updateNet();}
+  else if(d.t==='err')toast(d.msg);
+  else if(d.t==='full'&&!fullShown){fullShown=true;setNet('Table is full','var(--red)');showModal(`<h2>Table is full</h2><p>This table already has two players. Ask the host for a new link.</p>`);}
 }
 function send(d){
-  if(role==='host')hostAct(0,d);
-  else if(hostConn&&hostConn.open)hostConn.send(d);
-  else toast('Not connected to the table right now');
+  if(role==='host')return hostAct(0,d);
+  if(!publish(topicUp,Object.assign({},d,{from:PID})))toast('Not connected to the table right now – retrying…');
 }
 
 /* ===================== rendering ===================== */
@@ -701,7 +737,7 @@ function askName(title,sub){
   });
 }
 async function boot(){
-  if(typeof Peer==='undefined'){document.body.innerHTML='<p style="padding:30px">Could not load the networking library. Please refresh.</p>';return;}
+  if(typeof mqtt==='undefined'){document.body.innerHTML='<p style="padding:30px">Could not load the networking library. Please refresh.</p>';return;}
   const m=location.hash.match(/^#t=([a-z0-9-]+)$/i);
   if(!m){$('#lobby').hidden=false;$('#nameIn').value=myName;return;}
   tableId=m[1];
