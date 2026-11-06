@@ -120,7 +120,7 @@ header{display:flex;align-items:center;gap:14px;padding:9px 18px;border-bottom:1
 </head>
 <body>
 <header>
-  <div class="logo">🎲 Craps Live</div>
+  <div class="logo">🎲 Craps Live <span id="ver" style="font-size:11px;color:var(--muted);font-weight:400"></span></div>
   <div id="netStatus"><span class="dot"></span><span id="netText"></span></div>
   <div class="hdr-r">
     <button id="inviteBtn" hidden>📨 Invite link</button>
@@ -171,6 +171,7 @@ header{display:flex;align-items:center;gap:14px;padding:9px 18px;border-bottom:1
 
 <script>
 'use strict';
+const APP_VERSION=3;
 /* ===================== rules data ===================== */
 const NUMS=[4,5,6,8,9,10];
 const ODDS_PAY={4:[2,1],5:[3,2],6:[6,5],8:[6,5],9:[3,2],10:[2,1]};
@@ -406,7 +407,7 @@ function newState(){
 function hostStart(restore){
   role='host';mySeat=0;
   if(!restore){ST=newState();sysMsg(`${myName} opened the table.`);}
-  ST.ver=ST.ver||0;ST.sid=rid(6);
+  ST.ver=ST.ver||0;ST.sid=rid(6);ST.app=APP_VERSION;
   ST.players[0].connected=true;ST.players[0].name=myName;ST.rolling=false;
   if(ST.players[1])ST.players[1].connected=false;
   store.set('crp-host-'+tableId,'1');
@@ -515,6 +516,7 @@ function guestMsg(d){
   if(d.t==='state'){
     lastHostSeen=Date.now();
     const st=d.st;if(!st||typeof st.ver!=='number')return;
+    if((st.app||0)!==APP_VERSION){versionMismatch(st.app||0);return;}
     if(st.sid===lastSid&&st.ver<=lastVer)return;
     lastSid=st.sid;lastVer=st.ver;
     const s=st.players.findIndex(p=>p&&p.pid===PID);
@@ -526,6 +528,23 @@ function guestMsg(d){
   else if(d.t==='bye'){lastHostSeen=1;updateNet();}
   else if(d.t==='err')toast(d.msg);
   else if(d.t==='full'&&!fullShown){fullShown=true;setNet('Table is full','var(--red)');showModal(`<h2>Table is full</h2><p>This table already has two players. Ask the host for a new link.</p>`);}
+}
+let mismatchShown=false;
+function versionMismatch(hostV){
+  if(mismatchShown)return;mismatchShown=true;
+  const newer=hostV>APP_VERSION;
+  setNet('Version mismatch – refresh needed','var(--red)');
+  showModal(`<h2>Refresh needed</h2><p>${newer?'Your friend has a newer version of the game than you.':'Your friend has an older version of the game. Ask them to refresh their page (Ctrl+Shift+R, or Cmd+Shift+R on Mac).'}</p><div class="row">${newer?'<button class="primary" id="rf">Refresh now</button>':'<button id="rf">OK</button>'}</div>`);
+  $('#rf').onclick=()=>{if(newer)hardReload();else{hideModal();mismatchShown=false;}};
+}
+function hardReload(){const u=new URL(location.href);u.searchParams.set('r',Date.now().toString(36));location.replace(u.toString());}
+async function checkForUpdate(){
+  try{
+    const r=await fetch('version.json?t='+Date.now(),{cache:'no-store'});if(!r.ok)return false;
+    const j=await r.json();
+    if(j.v>APP_VERSION){const k='crp-upd-'+j.v;if(sessionStorage.getItem(k))return false;sessionStorage.setItem(k,'1');hardReload();return true;}
+  }catch(e){}
+  return false;
 }
 function send(d){
   if(role==='host')return hostAct(0,d);
@@ -737,6 +756,8 @@ function askName(title,sub){
   });
 }
 async function boot(){
+  $('#ver').textContent='v'+APP_VERSION;
+  if(await checkForUpdate())return;
   if(typeof mqtt==='undefined'){document.body.innerHTML='<p style="padding:30px">Could not load the networking library. Please refresh.</p>';return;}
   const m=location.hash.match(/^#t=([a-z0-9-]+)$/i);
   if(!m){$('#lobby').hidden=false;$('#nameIn').value=myName;return;}
